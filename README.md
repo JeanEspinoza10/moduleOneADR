@@ -67,16 +67,7 @@ arch-repo-java/
 
 ## Casos
 
-1. Plataforma de cursos online
-2. Sistema de compra de entradas a conciertos
-3. Gestión de restaurantes
-4. Sistema de votación electrónica
-5. Sistema de reservas de sala de reuniones
-6. Sistema de competición de deportes
-7. Gestión de matricula de estudiantes
-8. Plataforma de LLM para estudiantes.
-9. Sistema de gestión de condominios.
-10. Sistema de chatbot de atención al cliente.
+1. Sistema de compra de entradas a conciertos
 
 
 ---
