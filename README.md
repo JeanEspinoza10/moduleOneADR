@@ -71,8 +71,11 @@ arch-repo-java/
 
 ## Reparticion de Tareas
 Danny - ADR-003-dip-repositorio-prestamos
+
 Jean  - ADR-001-srp-servicio-notificaciones
+
 Christian - ADR-002-ocp-calculo-multas
+
 ---
 
 *Módulo 1 · Fundamentos de la Arquitectura de Software · Documentation as Code*
