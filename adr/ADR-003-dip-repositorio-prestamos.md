@@ -1,6 +1,6 @@
-# ADR-003 — Abstraer la persistencia de préstamos mediante interfaz
+# ADR-003 — Abstraer la persistencia de compras de entradas a conciertos mediante interfaz
 
-**Fecha:** 2025-02-17
+**Fecha:** 2025-04-15
 **Estado:** ✅ Aceptado
 **Principio SOLID:** D — Dependency Inversion Principle (DIP)
 
