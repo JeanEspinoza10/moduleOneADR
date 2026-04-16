@@ -8,28 +8,38 @@
 
 ## Contexto
 
-`PrestamoService` depende directamente de `PrestamoRepository`, una interfaz de Spring Data JPA. Aunque esto parece inofensivo, la dependencia sobre JPA (una tecnología de infraestructura) está acoplada a la capa de negocio:
+El servicio `CompraEntradaService` presenta una dependencia directa hacia `CompraEntradaRepository`, el cual corresponde a una interfaz de Spring Data JPA.
+Si bien esta relación puede parecer adecuada en un primer análisis, en realidad introduce un acoplamiento explícito entre la capa de negocio y una tecnología de infraestructura (JPA).
+
+Este tipo de dependencia compromete principios de diseño como la separación de responsabilidades y la independencia de la lógica de negocio, dificultando la evolución del sistema y limitando la posibilidad de sustituir la tecnología de persistencia en el futuro sin afectar la capa de servicio.
+
+# Riesgos identificados
+ - Acoplamiento tecnológico: La lógica de negocio queda vinculada a una implementación específica de persistencia.
+
+ - Reducción de flexibilidad: Se limita la capacidad de reemplazar JPA por otra solución (ej. JDBC, MongoDB, servicios externos).
+
+ - Impacto en pruebas: Las pruebas unitarias de la capa de negocio dependen de una infraestructura concreta, lo que complica la simulación o aislamiento.
 
 **Código actual (con el problema):**
 
 ```java
 // PrestamoService.java — depende directamente de la infraestructura JPA
 @Service
-public class PrestamoService {
+public class CompraEntradaService {
 
     // ❌ Spring Data JPA es un detalle de infraestructura
-    private final PrestamoRepository repository; // extiende JpaRepository<Prestamo, Long>
+    private final CompraEntradaRepository repository; // extiende JpaRepository<Prestamo, Long>
 
-    public PrestamoService(PrestamoRepository repository) {
+    public CompraEntradaService(CompraEntradaRepository repository) {
         this.repository = repository;
     }
 
-    public Prestamo registrarPrestamo(Usuario usuario, Libro libro) {
-        Prestamo prestamo = new Prestamo(usuario, libro, LocalDate.now().plusDays(14));
-        return repository.save(prestamo); // método de JpaRepository
+    public Prestamo registrarCompra(Usuario usuario, Libro libro) {
+        Compra compra = new Compra(usuario, libro, LocalDate.now().plusDays(14));
+        return repository.save(compra); // método de JpaRepository
     }
 
-    public List<Prestamo> obtenerPrestamosActivos(Long usuarioId) {
+    public List<Compra> obtenerCompraActivos(Long usuarioId) {
         // ❌ Llama a un método derivado del nombre del campo JPA
         return repository.findByUsuarioIdAndDevueltoFalse(usuarioId);
     }
