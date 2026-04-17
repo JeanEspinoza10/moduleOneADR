@@ -1,23 +1,25 @@
-# Arquitectura General — Sistema de Biblioteca Digital (SBD)
+# Arquitectura General — Sistema de Compra de entradas a conciertos.
 
 ---
 
 ## Descripción
 
-API REST en Java (Spring Boot) para gestionar préstamos de libros: usuarios, catálogo, préstamos y notificaciones.
+API REST en Java (Spring Boot) para gestionar compra de entradas a conciertos.
 
 ---
 
 ## Diagrama de Contexto
 
 ```
-  ┌───────────────┐        ┌─────────────────────────┐       ┌─────────────┐
-  │ Bibliotecario │ ───▶   │  Sistema de Biblioteca  │──────▶│ Servidor    │
-  └───────────────┘        │     Digital (SBD)       │       │ de correo   │
-                           │     API REST            │       └─────────────┘
-  ┌───────────────┐        │     Spring Boot 3       │
-  │     Usuario   │ ───▶   │     Puerto 8080         │
-  └───────────────┘        └─────────────────────────┘
+  ┌───────────────┐        ┌──────────────────────────────┐       ┌──────────────────┐
+  │   Cliente     │ ───▶   │  Sistema de Venta de Entradas │──────▶│ Pasarela de Pago│
+  └───────────────┘        │      (Tickets Concert)       │       │ (Stripe/PayPal) │
+                           │      API REST                │       └──────────────────┘
+  ┌───────────────┐        │      Backend (Spring/Node)   │
+  │   Organizador │ ───▶   │      Puerto 8080             │──────▶┌──────────────────┐
+  └───────────────┘        └──────────────────────────────┘       │ Servicio Email  │
+                                                                  │ (Notificaciones)│
+                                                                  └──────────────────┘
 ```
 
 ---
@@ -25,28 +27,33 @@ API REST en Java (Spring Boot) para gestionar préstamos de libros: usuarios, ca
 ## Capas del sistema
 
 ```
-┌────────────────────────────────────┐
-│         Capa de API                │
-│   Controladores REST · DTOs        │
-├────────────────────────────────────┤
-│       Capa de Aplicación           │
-│   PrestamoService                  │
-│   NotificacionService              │
-│   MultaFactory                     │
-├────────────────────────────────────┤
-│         Capa de Dominio            │
-│   Entidades: Prestamo, Usuario,    │
-│   Libro · Interfaces: Repositorios │
-│   EstrategiaMulta                  │
-├────────────────────────────────────┤
-│      Capa de Infraestructura       │
-│   JpaPrestamoRepositorio           │
-│   Implementaciones de multas       │
-│   Configuración Spring / JPA       │
-└────────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│              Capa de API                   │
+│   Controladores REST · DTOs                │
+│   TicketController                         │
+│   EventController                          │
+├────────────────────────────────────────────┤
+│           Capa de Aplicación               │
+│   TicketService                            │
+│   EventService                             │
+│   PaymentOrchestrator                      │
+│   NotificationService                      │
+├────────────────────────────────────────────┤
+│             Capa de Dominio                │
+│   Entidades: Ticket, Event, User           │
+│   Interfaces: TicketRepository, EventRepo  │
+│   PaymentStrategy                          │
+│   PricingStrategy                          │
+├────────────────────────────────────────────┤
+│          Capa de Infraestructura           │
+│   JpaTicketRepository                      │
+│   JpaEventRepository                       │
+│   StripePaymentService / PayPalService     │
+│   EmailService (SMTP / API externa)        │
+│   Configuración Spring / JPA               │
+└────────────────────────────────────────────┘
 ```
 
-**Regla de dependencias:** las capas superiores dependen de las inferiores **solo a través de interfaces**. La infraestructura nunca es importada por el dominio.
 
 ---
 
