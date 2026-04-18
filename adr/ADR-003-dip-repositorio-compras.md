@@ -8,7 +8,7 @@
 
 ## Contexto
 
-El servicio `CompraEntradaService` presenta una dependencia directa hacia `CompraEntradaRepository`, el cual corresponde a una interfaz de Spring Data JPA.
+Para poder realizar la compra de entradas se depende del servicio `CompraEntradaService` presenta una dependencia directa hacia `CompraEntradaRepository`, el cual corresponde a una interfaz de Spring Data JPA.
 Si bien esta relación puede parecer adecuada en un primer análisis, en realidad introduce un acoplamiento explícito entre la capa de negocio y una tecnología de infraestructura (JPA).
 
 Este tipo de dependencia compromete principios de diseño como la separación de responsabilidades y la independencia de la lógica de negocio, dificultando la evolución del sistema y limitando la posibilidad de sustituir la tecnología de persistencia en el futuro sin afectar la capa de servicio.
@@ -23,18 +23,18 @@ Este tipo de dependencia compromete principios de diseño como la separación de
 **Código actual (con el problema):**
 
 ```java
-// PrestamoService.java — depende directamente de la infraestructura JPA
+// CompraEntradaService.java — depende directamente de la infraestructura JPA
 @Service
 public class CompraEntradaService {
 
     // ❌ Spring Data JPA es un detalle de infraestructura
-    private final CompraEntradaRepository repository; // extiende JpaRepository<Prestamo, Long>
+    private final CompraEntradaRepository repository; // extiende JpaRepository<CompraEntrada, Long>
 
     public CompraEntradaService(CompraEntradaRepository repository) {
         this.repository = repository;
     }
 
-    public Prestamo registrarCompra(Usuario usuario, Entrada entrada) {
+    public CompraEntrada registrarCompra(Usuario usuario, Entrada entrada) {
         Compra compra = new Compra(usuario, entrada, LocalDate.now().plusDays(14));
         return repository.save(compra); // método de JpaRepository
     }
@@ -48,7 +48,7 @@ public class CompraEntradaService {
 
 **¿Cuál es el problema?**
 
-El servicio `CompraEntradaService` (capa de negocio, alto nivel) depende directamente de `CompraEntradaRepository`, el cual extiende `JpaRepository` (capa de infraestructura, bajo nivel). Este diseño genera las siguientes implicaciones:
+El servicio `CompraEntradaService` (capa de negocio, alto nivel) depende directamente de `CompraEntradaRepository`, el cual extiende `CrudRepository` (capa de infraestructura, bajo nivel). Este diseño genera las siguientes implicaciones:
 
  - Pruebas unitarias comprometidas: Para validar `CompraEntradaService` es necesario levantar el contexto de Spring y una base de datos en memoria (H2). Esto incrementa la complejidad, ralentiza la ejecución y vuelve las pruebas más frágiles.
 
@@ -64,7 +64,7 @@ Para mejorar la arquitectura, se sugiere introducir una abstracción de reposito
 
  - `CompraEntradaService` dependerá de una interfaz propia del dominio.
 
- - La implementación concreta (`JpaRepository`, MongoDB, REST, etc.) quedará encapsulada en la capa de infraestructura.
+ - La implementación concreta (`CrudRepository`, MongoDB, REST, etc.) quedará encapsulada en la capa de infraestructura.
 
  - Se logra mayor independencia tecnológica, facilidad de pruebas unitarias y alineación con principios de arquitectura limpia.
 
@@ -75,60 +75,32 @@ Para mejorar la arquitectura, se sugiere introducir una abstracción de reposito
 // No importa nada de Spring ni de JPA
 public interface CompraEntradaRepository {
 
-    Prestamo guardar(Compra compra);
+    CompraEntrada guardar(Compra compra, Usuario usuario, Entrada entrada);
 
     Optional<Compra> buscarPorId(Long id);
 
     List<Compra> listarActivosPorUsuario(Long usuarioId);
 }
 
-
-// CompraEntradaService.java — depende solo de la abstracción del dominio
-@Service
-public class CompraEntradaService {
-
-    private final CompraEntradaRepository repositorio; // ✅ interfaz propia, no JPA
-    private final NotificacionService notificaciones;
-
-    public CompraEntradaService(CompraEntradaRepository repositorio,
-                           NotificacionService notificaciones) {
-        this.repositorio = repositorio;
-        this.notificaciones = notificaciones;
-    }
-
-    public Compra registrarCompra(Usuario usuario, Entrada entrada) {
-        Compra compra = new Compra(usuario, entrada, LocalDate.now().plusDays(14));
-        Compra guardado = repositorio.guardar(compra); // interfaz, no JPA
-        notificaciones.notificarPrestamo(usuario, entrada);
-        return guardado;
-    }
-
-    public List<Compra> obtenerComprasActivos(Long usuarioId) {
-        return repositorio.listarActivosPorUsuario(usuarioId);
-    }
-}
-
-
-// --- CAPA DE INFRAESTRUCTURA ---
-
-// SpringDataCompraRepo.java — repositorio interno de Spring Data (detalle)
-public interface SpringDataCompraRepo extends JpaRepository<Compra, Long> {
+@CrudRepository
+public interface SpringDataCompraRepo extends CrudRepository<Compra, Long> {
     List<Compra> findByUsuarioIdAndDevueltoFalse(Long usuarioId);
 }
 
-
 // JpaCompraEntradoRepositorio.java — adaptador que conecta la interfaz del dominio con JPA
-@Repository
+@Service
 public class JpaCompraEntradoRepositorio implements CompraEntradaRepository {
 
-    private final SpringDataCompraRepo jpaRepo;
+    @Autowired
+    SpringDataCompraRepo jpaRepo;
 
-    public JpaCompraRepositorio(SpringDataCompraRepo jpaRepo) {
-        this.jpaRepo = jpaRepo;
-    }
+    @Autowired
+    NotificacionService notificaciones;
 
     @Override
-    public Compra guardar(Compra compra) {
+    public Compra guardar(Compra compra, Usuario usuario, Entrada entrada) {
+        Compra compra = new Compra(usuario, entrada, LocalDate.now().plusDays(14));
+        notificaciones.notificarCompraEntrada(usuario, entrada);
         return jpaRepo.save(compra);
     }
 
@@ -144,60 +116,6 @@ public class JpaCompraEntradoRepositorio implements CompraEntradaRepository {
 }
 
 
-// --- PRUEBAS UNITARIAS ---
-
-// InMemoryPrestamoRepositorio.java — implementación en memoria para tests
-// No necesita Spring, ni H2, ni ninguna base de datos
-public class InMemoryCompraEntradaRepositorio implements CompraEntradaRepository {
-
-    private final Map<Long, Compra> almacen = new HashMap<>();
-    private long nextId = 1;
-
-    @Override
-    public Compra guardar(Compra compra) {
-        compra.setId(nextId++);
-        almacen.put(compra.getId(), compra);
-        return compra;
-    }
-
-    @Override
-    public Optional<Compra> buscarPorId(Long id) {
-        return Optional.ofNullable(almacen.get(id));
-    }
-
-    @Override
-    public List<Compra> listarActivosPorUsuario(Long usuarioId) {
-        return almacen.values().stream()
-            .filter(p -> p.getUsuarioId().equals(usuarioId) && !p.isDevuelto())
-            .collect(Collectors.toList());
-    }
-}
-
-
-// CompraEntradaServiceTest.java — prueba unitaria sin Spring ni base de datos
-class CompraEntradaServiceTest {
-
-    private CompraEntradaService servicio;
-    private InMemoryCompraEntradaRepositorio repositorio;
-
-    @BeforeEach
-    void setUp() {
-        repositorio = new InMemoryCompraEntradaRepositorio();
-        NotificacionService notificaciones = mock(NotificacionService.class);
-        servicio = new CompraEntradaService(repositorio, notificaciones);
-    }
-
-    @Test
-    void registrarCompraEntrad_debeGuardarYAsignarId() {
-        Usuario usuario = new Usuario(1L, "Ana López", "ana@mail.com", "ESTUDIANTE");
-        Entrad entrada = new Entrada(10L, "Clean Code", "Robert C. Martin");
-
-        Prestamo resultado = servicio.registrarCompra(usuario, entrada);
-
-        assertNotNull(resultado.getId());
-        assertEquals(1, repositorio.listarActivosPorUsuario(1L).size());
-    }
-}
 ```
 
 ### Principio SOLID aplicado — DIP
@@ -208,7 +126,7 @@ class CompraEntradaServiceTest {
 
 ```
 ANTES (incorrecta):
-  CompraEntradaService ===> JpaRepository  (infraestructura)
+  CompraEntradaService ===> CrudRepository  (infraestructura)
 
 DESPUÉS (correcta):
   CompraEntradaService         ===> CompraEntradaRepositorio  (interfaz del dominio)
@@ -221,7 +139,7 @@ Tanto el servicio como el repositorio JPA dependen de una **abstracción** comú
 
 | Alternativa | Por qué se descartó |
 |-------------|---------------------|
-| Mockear `JpaRepository` directamente en los tests con Mockito | Funciona como parche, pero el acoplamiento permanece. Un cambio en la API de JPA puede romper los tests aunque el negocio no haya cambiado |
+| Mockear `CrudRepository` directamente en los tests con Mockito | Funciona como parche, pero el acoplamiento permanece. Un cambio en la API de JPA puede romper los tests aunque el negocio no haya cambiado |
 | Usar `@DataJpaTest` para todos los tests de servicio | Hace las pruebas de integración, no unitarias. Son más lentas y requieren más configuración |
 
 ---
