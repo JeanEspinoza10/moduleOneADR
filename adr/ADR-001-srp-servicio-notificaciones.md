@@ -1,6 +1,6 @@
 # ADR-001 — Separar el envío de notificaciones del servicio de préstamos
 
-**Fecha:** 2025-02-03
+**Fecha:** 2025-04-17
 **Estado:** ✅ Aceptado
 **Principio SOLID:** S — Single Responsibility Principle (SRP)
 
@@ -8,107 +8,122 @@
 
 ## Contexto
 
-La clase `PrestamoService` es responsable de registrar préstamos y, además, de enviar correos electrónicos al usuario cuando se registra o devuelve un libro.
+La clase `TicketService` es responsable de verificar si el usuario existe, calcular precio, procesar pago, guardar ticket de compra en DB y enviar correo de confirmación.
 
 **Código actual (con el problema):**
 
 ```java
-// PrestamoService.java — tiene más de una responsabilidad
+// TicketService.java — tiene más de una responsabilidad
 @Service
-public class PrestamoService {
+public class TicketService {
 
-    private final PrestamoRepository repository;
+    public void buyTicket(BuyTicketRequest request) {
 
-    public PrestamoService(PrestamoRepository repository) {
-        this.repository = repository;
-    }
+        // 1. Validación
+        if (request.getUserId() == null) {
+            throw new IllegalArgumentException("UserId requerido");
+        }
 
-    public Prestamo registrarPrestamo(Usuario usuario, Libro libro) {
-        Prestamo prestamo = new Prestamo(usuario, libro, LocalDate.now().plusDays(14));
-        repository.save(prestamo);
+        // 2. Calcular precio
+        double price = request.getBasePrice() * 1.18;
 
-        // ❌ Responsabilidad de notificación mezclada con lógica de préstamo
-        JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
-        mailSender.setHost("smtp.biblioteca.com");
-        SimpleMailMessage mensaje = new SimpleMailMessage();
-        mensaje.setTo(usuario.getEmail());
-        mensaje.setSubject("Préstamo registrado");
-        mensaje.setText("Tienes 14 días para devolver: " + libro.getTitulo());
-        mailSender.send(mensaje);
+        // 3. Procesar pago
+        // llamada directa a Stripe
+        System.out.println("Procesando pago con Stripe...");
 
-        return prestamo;
     }
 }
 ```
 
 **¿Cuál es el problema?**
 
-`PrestamoService` tiene **dos razones para cambiar**:
-- Si cambia la regla de negocio del préstamo (por ejemplo, de 14 a 21 días).
-- Si cambia el proveedor de correo o el texto de la notificación.
-
-Esto también dificulta las pruebas: para testear `registrarPrestamo` hay que configurar un servidor SMTP real o usar mocks complejos.
+`TicketService` tiene **3 razones para cambiar**:
+- Si cambia la validación del usuario.
+- Si cambia el cálculo de precios.
+- Si cambia la paserla de pagos.
 
 ---
 
 ## Decisión
 
-Extraemos el envío de notificaciones a una clase dedicada `NotificacionService`. `PrestamoService` delega en ella sin conocer los detalles del envío.
+Extraemos las responsabilidades en componentes independientes.
 
 **Código corregido:**
 
 ```java
-// NotificacionService.java — responsabilidad única: enviar notificaciones
-@Service
-public class NotificacionService {
+// TicketValidator.java — responsabilidad única: validar la solicitud
+@Component
+public class TicketValidator {
 
-    private final JavaMailSender mailSender;
-
-    public NotificacionService(JavaMailSender mailSender) {
-        this.mailSender = mailSender;
-    }
-
-    public void notificarPrestamo(Usuario usuario, Libro libro) {
-        SimpleMailMessage mensaje = new SimpleMailMessage();
-        mensaje.setTo(usuario.getEmail());
-        mensaje.setSubject("Préstamo registrado");
-        mensaje.setText("Tienes 14 días para devolver: " + libro.getTitulo());
-        mailSender.send(mensaje);
-    }
-
-    public void notificarDevolucion(Usuario usuario, Libro libro) {
-        SimpleMailMessage mensaje = new SimpleMailMessage();
-        mensaje.setTo(usuario.getEmail());
-        mensaje.setSubject("Devolución registrada");
-        mensaje.setText("Gracias por devolver: " + libro.getTitulo());
-        mailSender.send(mensaje);
+    public void validate(BuyTicketRequest request) {
+        if (request.getUserId() == null) {
+            throw new IllegalArgumentException("UserId requerido");
+        }
     }
 }
 
 
-// PrestamoService.java — responsabilidad única: gestionar préstamos
-@Service
-public class PrestamoService {
+// PricingService.java — responsabilidad única: calcular precios
+@Component
+public class PricingService {
 
-    private final PrestamoRepository repository;
-    private final NotificacionService notificaciones;
-
-    public PrestamoService(PrestamoRepository repository,
-                           NotificacionService notificaciones) {
-        this.repository = repository;
-        this.notificaciones = notificaciones;
-    }
-
-    public Prestamo registrarPrestamo(Usuario usuario, Libro libro) {
-        Prestamo prestamo = new Prestamo(usuario, libro, LocalDate.now().plusDays(14));
-        repository.save(prestamo);
-
-        // ✅ Delega sin conocer cómo se envía la notificación
-        notificaciones.notificarPrestamo(usuario, libro);
-
-        return prestamo;
+    public double calculatePrice(double basePrice) {
+        return basePrice * 1.18;
     }
 }
+
+
+// StripePaymentService.java - responsabilidad única: procesar pago
+public interface PaymentService {
+    void pay(double amount);
+}
+
+@Service
+public class StripePaymentService implements PaymentService {
+
+    @Override
+    public void pay(double amount) {
+        System.out.println("Pago realizado con Stripe: " + amount);
+    }
+}
+
+
+// Clase Principal 
+@Service
+public class TicketService {
+
+    private final TicketValidator validator;
+    private final PricingService pricingService;
+    private final PaymentService paymentService;
+    private final TicketRepository ticketRepository;
+    private final NotificationService notificationService;
+
+    public TicketService(
+        TicketValidator validator,
+        PricingService pricingService,
+        PaymentService paymentService,
+        TicketRepository ticketRepository,
+        NotificationService notificationService
+    ) {
+        this.validator = validator;
+        this.pricingService = pricingService;
+        this.paymentService = paymentService;
+        this.ticketRepository = ticketRepository;
+        this.notificationService = notificationService;
+    }
+
+    public void buyTicket(BuyTicketRequest request) {
+
+        validator.validate(request);
+
+        double price = pricingService.calculatePrice(request.getBasePrice());
+
+        paymentService.pay(price);
+
+    }
+}
+
+
 ```
 
 ### Principio SOLID aplicado — SRP
@@ -117,28 +132,21 @@ public class PrestamoService {
 
 | Clase | Única razón de cambio |
 |-------|----------------------|
-| `PrestamoService` | Reglas de negocio del préstamo |
-| `NotificacionService` | Canales o contenido de notificaciones |
+| `TicketValidator` | Reglas para validar la soliicitud. |
+| `PricingService` | Cálculo del precio |
+| `StripePaymentService` | Proceso de pago |
 
-**Antes:** un cambio en el proveedor de correo obligaba a modificar `PrestamoService`.  
-**Después:** ese cambio solo afecta a `NotificacionService`.
+**Antes:** un cambio en el proveedor de pago obligaba a modificar `TicketService`.  
+**Después:** ese cambio solo afecta a `StripePaymentService`.
 
-### Alternativas consideradas
-
-| Alternativa | Por qué se descartó |
-|-------------|---------------------|
-| Dejar todo en `PrestamoService` y solo extraer la configuración SMTP | El problema de fondo persiste: la clase sigue teniendo dos razones de cambio |
-| Usar eventos de dominio (Spring Events) para desacoplar completamente | Válido a futuro, pero añade complejidad innecesaria para el estado actual del sistema |
-
----
 
 ## Consecuencias
 
 ### Positivas
-- `PrestamoService` se puede probar con un mock simple de `NotificacionService`, sin configurar SMTP.
-- Cambiar el proveedor de correo no toca la lógica de préstamos.
-- `NotificacionService` puede reutilizarse desde otros servicios (ej. recordatorios de vencimiento).
+- `TicketService` queda enfocado en orquestar el flujo, lo que lo hace más claro y fácil de mantener.
+- Cada componente (TicketValidator, PricingService, PaymentService) se puede probar de forma aislada con mocks simples.
+- Cambios en la pasarela de pago no afectan la lógica principal; solo se modifica o agrega una implementación de PaymentService.
 
 ### Negativas / trade-offs
-- Se añade una clase y una dependencia más. Para sistemas muy pequeños puede parecer excesivo.
-- El flujo completo ahora involucra dos clases en lugar de una.
+- Se incrementa el número de clases y dependencias, lo que puede ser excesivo en sistemas pequeños.
+- El flujo de ejecución ya no está en un solo lugar, lo que puede dificultar la comprensión inicial.
