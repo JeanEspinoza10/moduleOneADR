@@ -1,4 +1,4 @@
-# ADR-001 — Separar el proceso comprar Ticket
+# ADR-001 — Separación de responsabilidades en el proceso de compra de tickets
 
 **Fecha:** 2025-04-17
 **Estado:** ✅ Aceptado
