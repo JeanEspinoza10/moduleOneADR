@@ -8,7 +8,7 @@
 
 ## Contexto
 
-La clase `TicketService` es responsable de verificar si el usuario existe, calcular precio, procesar pago, guardar ticket de compra en DB y enviar correo de confirmación.
+La clase `TicketService` es responsable de verificar si el usuario existe, calcular precio y procesar pago.
 
 **Código actual (con el problema):**
 
