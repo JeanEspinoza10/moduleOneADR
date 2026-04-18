@@ -1,4 +1,4 @@
-# ADR-001 — Separar el envío de notificaciones del servicio de préstamos
+# ADR-001 — Separar el proceso comprar Ticket
 
 **Fecha:** 2025-04-17
 **Estado:** ✅ Aceptado
