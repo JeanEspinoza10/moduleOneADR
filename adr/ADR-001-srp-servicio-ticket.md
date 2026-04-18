@@ -1,4 +1,4 @@
-# ADR-001 — Separar el proceso comprar Ticket
+# ADR-001 — Separación de responsabilidades en el proceso de compra de tickets
 
 **Fecha:** 2025-04-17
 **Estado:** ✅ Aceptado
@@ -8,7 +8,7 @@
 
 ## Contexto
 
-La clase `TicketService` es responsable de verificar si el usuario existe, calcular precio, procesar pago, guardar ticket de compra en DB y enviar correo de confirmación.
+La clase `TicketService` es responsable de verificar si el usuario existe, calcular precio y procesar pago.
 
 **Código actual (con el problema):**
 
